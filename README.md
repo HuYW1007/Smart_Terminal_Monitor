@@ -19,6 +19,13 @@ The Smart Terminal Monitor is a Python application that wraps your shell session
 - **Expert Persona**: AI acts as a Linux and programming expert to provide precise solutions.
   **专家人设**: AI 扮演 Linux 和编程专家，提供精准的解决方案。
 
+## Git clone / 克隆项目
+
+    ```bash
+    git clone https://github.com/huyw/smart_term_monitor.git
+    cd smart_term_monitor
+    ```
+
 ## Setup / 安装与配置
 
 1.  **Install Dependencies / 安装依赖**:
@@ -28,7 +35,6 @@ The Smart Terminal Monitor is a Python application that wraps your shell session
 
 2.  **Configuration / 配置**:
     Create a file `smart_term_config.yaml` in the project directory or `~/.smart_term_config.yaml` with your API keys:
-    
     在项目目录或 `~/.smart_term_config.yaml` 创建配置文件 `smart_term_config.yaml`，填入您的 API Key：
 
     ```yaml
@@ -46,6 +52,11 @@ The Smart Terminal Monitor is a Python application that wraps your shell session
     ```
 
 ## Usage / 使用指南
+
+0.  **Goto the project directory / 进入安装路径**:
+    ```bash
+    cd your_path_to_directory/smart_term_monitor
+    ```
 
 1.  **Start the Monitor / 启动监控**:
     ```bash
@@ -74,3 +85,13 @@ The Smart Terminal Monitor is a Python application that wraps your shell session
     > The monitor buffers output per command (resetting on Enter). If you want to analyze a long running command's output, just press `Ctrl+G` after it finishes.
     > 
     > 监控器按命令缓冲输出（回车重置）。如果要分析长运行命令的输出，请在命令结束后按下 `Ctrl+G`。
+
+4.  **Example / 示例**:
+
+    ![alt text](<png/截图 2025-11-21 22-27-49.png>) 
+    ![alt text](<png/截图 2025-11-21 22-45-23.png>)
+
+5.  **Stop the Monitor / 停止监控**:
+    Press `Ctrl+D` to exit the monitor.
+    
+    按下 `Ctrl+D` 退出监控。

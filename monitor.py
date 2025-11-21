@@ -8,7 +8,10 @@ class TerminalMonitor:
         self._init_llm()
 
     def _init_llm(self):
-        from .llm_client import OpenAIProvider, GeminiProvider
+        try:
+            from .llm_client import OpenAIProvider, GeminiProvider
+        except ImportError:
+            from llm_client import OpenAIProvider, GeminiProvider
         
         if self.config.provider == "openai":
             self.llm = OpenAIProvider(self.config.api_key, self.config.model, self.config.base_url, self.config.language)
