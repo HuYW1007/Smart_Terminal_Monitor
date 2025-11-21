@@ -1,0 +1,5 @@
+provider: openai  # or gemini
+api_key: your_api_key_here
+model: gpt-4o     # or gemini-pro
+base_url: null    # optional
+language: null    # optional, 'cn' or 'en'

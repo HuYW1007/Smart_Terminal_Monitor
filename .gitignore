@@ -1,0 +1,5 @@
+__pycache__/
+*.pyc
+.env
+smart_term_config.yaml
+.DS_Store
