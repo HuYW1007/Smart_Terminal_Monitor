@@ -1,5 +1,24 @@
 import os
 import sys
+import pty
+import select
+import tty
+import termios
+import fcntl
+import struct
+from rich.console import Console
+from rich.markdown import Markdown
+from rich.panel import Panel
+
+try:
+    from .llm_client import OpenAIProvider, GeminiProvider
+except ImportError:
+    from llm_client import OpenAIProvider, GeminiProvider
+
+try:
+    from .logger import ConversationLogger
+except ImportError:
+    from logger import ConversationLogger
 
 class TerminalMonitor:
     def __init__(self, config):
@@ -8,10 +27,7 @@ class TerminalMonitor:
         self._init_llm()
 
     def _init_llm(self):
-        try:
-            from .llm_client import OpenAIProvider, GeminiProvider
-        except ImportError:
-            from llm_client import OpenAIProvider, GeminiProvider
+
         
         if self.config.provider == "openai":
             self.llm = OpenAIProvider(self.config.api_key, self.config.model, self.config.base_url, self.config.language)
@@ -20,17 +36,17 @@ class TerminalMonitor:
         else:
             print(f"Warning: Unknown provider {self.config.provider}")
             self.llm = None
+        
+
+        
+        log_summary_length = getattr(self.config, 'log_summary_length', 50)
+        self.logger = ConversationLogger(log_summary_length=log_summary_length)
 
     def run(self):
         """
         Spawns the shell and monitors execution.
         """
-        import pty
-        import select
-        import tty
-        import termios
-        import fcntl
-        import struct
+
 
         # First run check: Language selection
         if not self.config.language:
@@ -51,11 +67,12 @@ class TerminalMonitor:
         
         # Save original tty settings
         try:
-            old_tty = termios.tcgetattr(sys.stdin)
+            self.old_tty = termios.tcgetattr(sys.stdin)
         except:
-            old_tty = None
+            self.old_tty = None
 
         pid, master_fd = pty.fork()
+        self.master_fd = master_fd
 
         if pid == 0:
             # Child process (the shell)
@@ -63,7 +80,7 @@ class TerminalMonitor:
         else:
             # Parent process (the monitor)
             try:
-                if old_tty:
+                if self.old_tty:
                     tty.setraw(sys.stdin.fileno())
                 
                 self._io_loop(master_fd)
@@ -71,14 +88,13 @@ class TerminalMonitor:
             except Exception as e:
                 print(f"\r\nMonitor error: {e}\r\n")
             finally:
-                if old_tty:
-                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_tty)
+                if self.old_tty:
+                    termios.tcsetattr(sys.stdin, termios.TCSADRAIN, self.old_tty)
                 os.close(master_fd)
                 # Wait for child to exit
                 os.waitpid(pid, 0)
 
     def _io_loop(self, master_fd):
-        import select
         
         # Buffer for the current command output
         self.output_buffer = b""
@@ -135,11 +151,7 @@ class TerminalMonitor:
         """
         Called when user triggers the AI analysis.
         """
-        import termios
-        import tty
-        from rich.console import Console
-        from rich.markdown import Markdown
-        from rich.panel import Panel
+
 
         output_to_analyze = self.output_buffer.decode('utf-8', errors='replace')
         if not output_to_analyze.strip():
@@ -152,44 +164,126 @@ class TerminalMonitor:
             os.write(sys.stdout.fileno(), msg.encode())
             return
 
-        # Temporarily restore TTY to cooked mode for Rich printing
+        # Temporarily restore TTY to cooked mode for user interaction
+        current_tty = None
         try:
             current_tty = termios.tcgetattr(sys.stdin)
-            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, termios.tcgetattr(sys.stdout)) # Reset to stdout settings? Or just cooked?
-            # Actually, we should have saved the 'original' settings in __init__ or run
-            # But we can just use a simpler approach: print \r\n manually with Rich?
-            # Rich console has a 'force_terminal' option.
-            # But if we are in RAW mode, newlines are just \n, we need \r\n.
-            # It's safer to temporarily restore the original TTY settings we saved in run().
-            # However, 'run' local variable 'old_tty' is not accessible here.
-            # Let's store old_tty in self.
+            if self.old_tty:
+                # Create a copy of old_tty settings
+                new_settings = list(self.old_tty)
+                # Disable ECHOCTL to prevent ^C from being echoed by terminal
+                new_settings[3] = new_settings[3] & ~termios.ECHOCTL
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, new_settings)
         except:
             pass
 
-        # We need to access old_tty. Let's modify run() to store it in self.old_tty
-        # For now, assuming we are in raw mode, we can try to use Rich but it might look weird if we don't handle \r.
-        
+        # Truncate output if it exceeds max_context_chars
+        max_chars = getattr(self.config, 'max_context_chars', 10000)
+        if len(output_to_analyze) > max_chars:
+            output_to_analyze = output_to_analyze[-max_chars:]
+            msg = f"\r\n\033[1;33m[SmartTerm] Output truncated to last {max_chars} chars.\033[0m"
+            os.write(sys.stdout.fileno(), msg.encode())
+
         msg = f"\r\n\033[1;34m[SmartTerm] Analyzing {len(output_to_analyze)} chars...\033[0m\r\n"
         os.write(sys.stdout.fileno(), msg.encode())
         
+        # Flag to track if we exited via Ctrl+C
+        interrupted = False
+
         if self.llm:
-            explanation = self.llm.generate_explanation(output_to_analyze)
-            
-            # Use Rich to render Markdown
-            # We need to write to a string buffer first to handle line endings if we stay in raw mode
-            # OR we can just temporarily switch to cooked mode if we have the settings.
-            
-            # Let's try a hybrid approach: Use Rich to render to string, then replace \n with \r\n
-            console = Console(force_terminal=True, width=80) # Fixed width for safety
-            with console.capture() as capture:
-                console.print(Panel(Markdown(explanation), title="SmartTerm AI Suggestion", border_style="green"))
-            
-            rendered_output = capture.get()
-            rendered_output = rendered_output.replace('\n', '\r\n')
-            
-            os.write(sys.stdout.fileno(), f"\r\n{rendered_output}\r\n".encode())
+            # Initialize chat messages
+            messages = [
+                {"role": "system", "content": self.llm.system_prompt},
+                {"role": "user", "content": f"Terminal output:\n{output_to_analyze}"}
+            ]
+
+            console = Console(force_terminal=True, width=80)
+
+            while True:
+                try:
+                    # Get response from LLM
+                    if hasattr(self.llm, 'chat'):
+                        explanation = self.llm.chat(messages)
+                    else:
+                        # Fallback for providers without chat
+                        explanation = self.llm.generate_explanation(output_to_analyze)
+
+                    # Display response
+                    print() # Newline
+                    console.print(Panel(Markdown(explanation), title="SmartTerm AI Suggestion", border_style="green"))
+                    print() # Newline
+
+                    # Generate summary for log filename
+                    log_summary_length = getattr(self.config, 'log_summary_length', 50)
+                    generated_summary = None
+                    try:
+                        summary_prompt = [
+                            {"role": "system", "content": "You are a helpful assistant."},
+                            {"role": "user", "content": f"Summarize the following terminal output in one sentence (max {log_summary_length} chars) for a filename. Do not use special characters. Output:\n{output_to_analyze}"}
+                        ]
+                        if hasattr(self.llm, 'chat'):
+                            # We use a separate chat call, but we don't want to mess up the main conversation history if possible.
+                            # Actually, self.llm.chat takes messages. We can just call it.
+                            # But wait, self.llm.chat might modify internal state for Gemini?
+                            # GeminiProvider.chat uses history but doesn't store it in the object (it creates a new chat session each time).
+                            # So it's safe.
+                            generated_summary = self.llm.chat(summary_prompt)
+                        else:
+                            # Fallback
+                            generated_summary = self.llm.generate_explanation(f"Summarize this for a filename (max {log_summary_length} chars): {output_to_analyze}")
+                        
+                        # Clean up summary
+                        if generated_summary:
+                            generated_summary = generated_summary.strip().replace('\n', ' ').replace('\r', '')
+                    except Exception as e:
+                        print(f"Error generating summary: {e}")
+
+                    # Log the interaction
+                    log_context = messages[-1]["content"]
+                    self.logger.log(log_context, explanation, summary=generated_summary)
+
+                    # Append assistant response to history
+                    messages.append({"role": "assistant", "content": explanation})
+
+                    # Prompt for user input
+                    try:
+                        user_input = input("\033[1;33mUser (Ctrl+C to exit): \033[0m")
+                        if not user_input.strip():
+                            continue
+                        
+                        # Append user input to history
+                        messages.append({"role": "user", "content": user_input})
+                        
+                    except KeyboardInterrupt:
+                        # Just break the loop cleanly
+                        interrupted = True
+                        break
+                    except EOFError:
+                        break
+
+                except KeyboardInterrupt:
+                    # Handle Ctrl+C during LLM generation
+                    interrupted = True
+                    break
+                except Exception as e:
+                    print(f"\n\033[1;31mError: {e}\033[0m")
+                    break
             
         else:
             msg = "\r\n\033[1;31m[SmartTerm] No LLM provider configured.\033[0m\r\n"
             os.write(sys.stdout.fileno(), msg.encode())
+
+        # Restore TTY to raw mode (or whatever it was before)
+        if current_tty:
+            try:
+                termios.tcsetattr(sys.stdin, termios.TCSADRAIN, current_tty)
+            except:
+                pass
+
+        # If interrupted by user, send SIGINT to shell to print ^C and show prompt immediately
+        if interrupted:
+            os.write(self.master_fd, b'\x03')
+
+
+
 

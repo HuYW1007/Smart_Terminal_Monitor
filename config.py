@@ -9,6 +9,8 @@ class Config:
         self.model = "gpt-4o"
         self.base_url = None
         self.language = None
+        self.max_context_chars = 10000
+        self.log_summary_length = 100
 
     def load(self):
         """
@@ -40,6 +42,8 @@ class Config:
                         self.model = data.get('model', self.model)
                         self.base_url = data.get('base_url', self.base_url)
                         self.language = data.get('language', self.language)
+                        self.max_context_chars = data.get('max_context_chars', self.max_context_chars)
+                        self.log_summary_length = data.get('log_summary_length', self.log_summary_length)
             except Exception as e:
                 print(f"Warning: Failed to load config file: {e}")
         
@@ -56,7 +60,9 @@ class Config:
             'api_key': self.api_key,
             'model': self.model,
             'base_url': self.base_url,
-            'language': self.language
+            'language': self.language,
+            'max_context_chars': self.max_context_chars,
+            'log_summary_length': self.log_summary_length
         }
         
         # If config_path doesn't exist (new install), default to current dir or home

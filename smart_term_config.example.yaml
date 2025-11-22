@@ -1,5 +1,6 @@
-provider: openai  # or gemini
+provider: openai
 api_key: your_api_key_here
-model: gpt-4o     # or gemini-pro
-base_url: null    # optional
-language: null    # optional, 'cn' or 'en'
+model: gpt-4o
+language: en
+max_context_chars: 10000
+log_summary_length: 100

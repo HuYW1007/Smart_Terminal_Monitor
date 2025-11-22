@@ -10,14 +10,24 @@ The Smart Terminal Monitor is a Python application that wraps your shell session
 - **AI Integration**: Supports OpenAI, Gemini, and other OpenAI-compatible providers (e.g., DeepSeek).
 - **One-Key Analysis**: Press `Ctrl+G` to analyze the output of the last command.
 - **Rich Output**: AI suggestions are rendered in Markdown directly in your terminal.  
-- **Bilingual Support**: Supports English and Chinese responses, configurable via settings.  
+- **Smart Log Summaries**: Automatically generates concise summaries for log filenames using the LLM.
+- **Language Persistence**: Robustly enforces your preferred language (Chinese/English) for all AI interactions.
+- **Configurable Context**: Customize the amount of terminal history sent to the AI.
+- **Concurrent Logging**: Supports multiple terminal instances with unique log files.
+- **Markdown Rendering**: Displays AI responses in beautifully formatted Markdown.
+- **Interactive Chat**: Engage in a multi-turn conversation with the AI about the error.
 - **Expert Persona**: AI acts as a Linux and programming expert to provide precise solutions.
 
 - **透明 Shell 包装**: 在 PTY 中运行您的默认 Shell（bash, zsh 等）。
 - **AI 集成**: 支持 OpenAI, Gemini 以及其他兼容 OpenAI 接口的模型（如 DeepSeek）。
 - **一键分析**: 按下 `Ctrl+G` 即可分析上一条命令的输出。
 - **富文本输出**: AI 建议直接在终端中以 Markdown 格式渲染。
-- **双语支持**: 支持中英文回答，可通过配置进行修改。
+- **智能日志摘要**: 使用 LLM 自动为日志文件名生成简洁的摘要。
+- **语言持久化**: 强制执行您偏好的语言（中文/英文）进行所有 AI 交互。
+- **可配置上下文**: 自定义发送给 AI 的终端历史记录量。
+- **并发日志记录**: 支持多个终端实例，每个实例都有唯一的日志文件。
+- **Markdown 渲染**: 以精美格式的 Markdown 显示 AI 响应。
+- **交互式聊天**: 与 AI 就错误进行多轮对话。
 - **专家人设**: AI 扮演 Linux 和编程专家，提供精准的解决方案。
 
 ## Git clone / 克隆项目
@@ -42,14 +52,14 @@ The Smart Terminal Monitor is a Python application that wraps your shell session
     你可以找到 `smart_term_config.example.yaml` 来编辑
     
 
-    ```yaml
-    provider: openai  # or gemini
-    api_key: sk-...
-    model: gpt-4o     # or gemini-pro, deepseek-chat
-    base_url: ...     # optional, for other providers (e.g., https://api.deepseek.com)
-    language: cn      # optional, 'cn' or 'en' (auto-detected on first run / 首次运行自动检测)
-    ```
-    
+```yaml
+provider: openai # or gemini
+api_key: your_api_key
+model: gpt-4o # or gemini-pro
+language: cn # or en
+max_context_chars: 10000 # Max characters of terminal output to analyze
+log_summary_length: 50 # Max length of log filename summary
+```    
     Alternatively, set environment variables 
     或者设置环境变量:
     ```bash
@@ -96,6 +106,12 @@ The Smart Terminal Monitor is a Python application that wraps your shell session
     > The monitor buffers output per command (resetting on Enter). If you want to analyze a long running command's output, just press `Ctrl+G` after it finishes.
     > 
     > 监控器按命令缓冲输出（回车重置）。如果要分析长运行命令的输出，请在命令结束后按下 `Ctrl+G`。
+
+4.  **Dialogue / 对话**:
+    If you are not satisfied with the response from the large model or have further questions, you can directly converse with it. After the conversation is complete, use `Ctrl+C` to end the current conversation and continue executing commands. You can still use `Ctrl+G` to enter the large model conversation later.
+
+    如果你对大模型的回答不满意或有进一步的问题，可以直接与其对话，对话完成后，使用`Ctrl+C`结束本次对话，继续执行命令，后续仍可以使用`Ctrl+G`进入大模型对话中
+    
 
 4.  **Example / 示例**:
     examples
